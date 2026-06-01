@@ -21,6 +21,8 @@ import BusinessIntelligence from './components/BusinessIntelligence';
 import CaseInvestigationCenter from './components/CaseInvestigationCenter';
 import BusinessImpact from './components/BusinessImpact';
 import PlatformGuide from './components/PlatformGuide';
+import ThreatIntelligence from './components/ThreatIntelligence';
+import { API_BASE, WS_BASE } from './config';
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -42,7 +44,7 @@ function App() {
   // 1. Fetch Overview Statistics
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/v1/overview');
+      const res = await fetch(`${API_BASE}/overview`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -64,7 +66,7 @@ function App() {
   useEffect(() => {
     const connectWS = () => {
       console.log("Connecting to SentinelX V2 streaming alerts WS...");
-      const ws = new WebSocket('ws://127.0.0.1:8000/api/v1/stream/alerts');
+      const ws = new WebSocket(`${WS_BASE}/stream/alerts`);
       wsRef.current = ws;
       
       ws.onmessage = (event) => {

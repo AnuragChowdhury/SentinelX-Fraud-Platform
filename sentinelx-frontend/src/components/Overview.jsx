@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   Coins
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 function Overview({ stats, setSelectedPlayerId, setActiveTab }) {
   const [players, setPlayers] = useState([]);
@@ -23,7 +24,7 @@ function Overview({ stats, setSelectedPlayerId, setActiveTab }) {
   // Fetch players directory from API
   const fetchPlayers = async () => {
     try {
-      let url = `http://127.0.0.1:8000/api/v1/players?page=${page}&limit=${limit}`;
+      let url = `${API_BASE}/players?page=${page}&limit=${limit}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (riskFilter) url += `&risk_level=${encodeURIComponent(riskFilter)}`;
       if (typeFilter) url += `&player_type=${encodeURIComponent(typeFilter)}`;

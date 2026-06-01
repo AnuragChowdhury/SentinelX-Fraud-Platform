@@ -10,6 +10,7 @@ import {
   Cpu,
   BrainCircuit
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 function BusinessIntelligence() {
   const [biData, setBiData] = useState(null);
@@ -31,7 +32,7 @@ function BusinessIntelligence() {
 
   const fetchBIData = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/v1/business-intelligence');
+      const res = await fetch(`${API_BASE}/business-intelligence`);
       if (res.ok) {
         const data = await res.json();
         setBiData(data);
@@ -60,7 +61,7 @@ function BusinessIntelligence() {
   // API triggers
   const handleUpdateThresholds = async (valMed, valHigh, valCrit) => {
     try {
-      await fetch(`http://127.0.0.1:8000/api/v1/business-intelligence/thresholds?medium=${valMed}&high=${valHigh}&critical=${valCrit}`, {
+      await fetch(`${API_BASE}/business-intelligence/thresholds?medium=${valMed}&high=${valHigh}&critical=${valCrit}`, {
         method: 'POST'
       });
       fetchBIData();
@@ -71,7 +72,7 @@ function BusinessIntelligence() {
 
   const handleUpdateWeights = async () => {
     try {
-      await fetch(`http://127.0.0.1:8000/api/v1/business-intelligence/weights?graph=${graphWeight}&behavioral=${behaviorWeight}&device=${deviceWeight}&transaction=${transWeight}`, {
+      await fetch(`${API_BASE}/business-intelligence/weights?graph=${graphWeight}&behavioral=${behaviorWeight}&device=${deviceWeight}&transaction=${transWeight}`, {
         method: 'POST'
       });
       fetchBIData();
@@ -84,7 +85,7 @@ function BusinessIntelligence() {
   const handleInjectDrift = async () => {
     setDriftActionLoading(true);
     try {
-      await fetch('http://127.0.0.1:8000/api/v1/business-intelligence/drift/activate', { method: 'POST' });
+      await fetch(`${API_BASE}/business-intelligence/drift/activate`, { method: 'POST' });
       fetchBIData();
       alert("Concept Drift successfully injected! Supervised model performance degraded.");
     } catch (err) {
@@ -97,7 +98,7 @@ function BusinessIntelligence() {
   const handleTriggerRetrain = async () => {
     setDriftActionLoading(true);
     try {
-      await fetch('http://127.0.0.1:8000/api/v1/business-intelligence/drift/retrain', { method: 'POST' });
+      await fetch(`${API_BASE}/business-intelligence/drift/retrain`, { method: 'POST' });
       fetchBIData();
       alert("Online Adaptive Retraining successfully executed! Platform calibrated to new exploit signatures.");
     } catch (err) {

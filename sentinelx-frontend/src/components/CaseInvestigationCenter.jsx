@@ -14,6 +14,7 @@ import {
   Zap,
   DollarSign
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 function CaseInvestigationCenter({ playerId, onClose }) {
   const [dossier, setDossier] = useState(null);
@@ -23,7 +24,7 @@ function CaseInvestigationCenter({ playerId, onClose }) {
   const fetchDossier = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/players/${playerId}/investigate`);
+      const res = await fetch(`${API_BASE}/players/${playerId}/investigate`);
       if (res.ok) {
         const data = await res.json();
         setDossier(data);
@@ -43,7 +44,7 @@ function CaseInvestigationCenter({ playerId, onClose }) {
 
   const handleIntervention = async (action) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/players/${playerId}/intervene?action=${action}`, {
+      const res = await fetch(`${API_BASE}/players/${playerId}/intervene?action=${action}`, {
         method: 'POST'
       });
       if (res.ok) {

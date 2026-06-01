@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Network, Activity, Info, RefreshCw } from 'lucide-react';
+import { API_BASE } from '../config';
 
 function NetworkGraph({ setSelectedPlayerId }) {
   const [graphData, setGraphData] = useState({ elements: [] });
@@ -22,7 +23,7 @@ function NetworkGraph({ setSelectedPlayerId }) {
   // 1. Fetch Collusion Rings List (to populate drop-down selector)
   const fetchRings = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/v1/collusion');
+      const res = await fetch(`${API_BASE}/collusion`);
       if (res.ok) {
         const data = await res.json();
         setRingsList(data.win_trading_rings || []);
@@ -36,7 +37,7 @@ function NetworkGraph({ setSelectedPlayerId }) {
   const fetchSubgraph = async (ringId = '') => {
     setLoading(true);
     try {
-      let url = 'http://127.0.0.1:8000/api/v1/graph/subgraph';
+      let url = `${API_BASE}/graph/subgraph`;
       if (ringId) url += `?ring_id=${encodeURIComponent(ringId)}`;
       
       const res = await fetch(url);

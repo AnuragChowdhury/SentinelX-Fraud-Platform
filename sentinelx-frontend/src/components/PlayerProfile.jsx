@@ -11,6 +11,7 @@ import {
   EyeOff,
   UserCheck
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 function PlayerProfile({ playerId, onClose }) {
   const [profile, setProfile] = useState(null);
@@ -22,9 +23,9 @@ function PlayerProfile({ playerId, onClose }) {
       setLoading(true);
       try {
         // Fetch base profile details
-        const profRes = await fetch(`http://127.0.0.1:8000/api/v1/players/${playerId}`);
+        const profRes = await fetch(`${API_BASE}/players/${playerId}`);
         // Fetch explanation/SHAP details
-        const expRes = await fetch(`http://127.0.0.1:8000/api/v1/players/${playerId}/explain`);
+        const expRes = await fetch(`${API_BASE}/players/${playerId}/explain`);
         
         if (profRes.ok && expRes.ok) {
           const profData = await profRes.json();
