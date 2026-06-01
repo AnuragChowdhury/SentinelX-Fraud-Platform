@@ -21,7 +21,6 @@ import BusinessIntelligence from './components/BusinessIntelligence';
 import CaseInvestigationCenter from './components/CaseInvestigationCenter';
 import BusinessImpact from './components/BusinessImpact';
 import PlatformGuide from './components/PlatformGuide';
-import ThreatIntelligence from './components/ThreatIntelligence';
 import { API_BASE, WS_BASE } from './config';
 
 function App() {
