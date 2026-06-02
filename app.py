@@ -430,6 +430,50 @@ with tab_bi:
                 st.session_state.drift_active = False
                 st.toast("Model successfully retrained and calibrated!", icon="🎓")
                 st.rerun()
+                
+    st.write("---")
+    col_dist, col_fraud_types = st.columns(2)
+    with col_dist:
+        st.markdown("**📊 Unified Risk Scores Distribution**")
+        fig_dist = go.Figure()
+        fig_dist.add_trace(go.Histogram(
+            x=scored_df["risk_score"] * 100,
+            nbinsx=20,
+            marker_color="#ff0055",
+            opacity=0.85
+        ))
+        fig_dist.update_layout(
+            height=200, margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(title="Unified Risk Score (%)", gridcolor="rgba(255,255,255,0.05)"),
+            yaxis=dict(title="Number of Players", gridcolor="rgba(255,255,255,0.05)")
+        )
+        st.plotly_chart(fig_dist, use_container_width=True)
+        
+    with col_fraud_types:
+        st.markdown("**🛡️ Flagged Fraud Profile Breakdown**")
+        # Count non-legitimate player classes
+        flagged_df = scored_df[scored_df["risk_level"] != "LOW"]
+        if not flagged_df.empty:
+            fraud_counts = flagged_df["player_type"].value_counts().reset_index()
+            fraud_counts.columns = ["Type", "Count"]
+            
+            fig_pie = go.Figure()
+            fig_pie.add_trace(go.Pie(
+                labels=fraud_counts["Type"].str.upper(),
+                values=fraud_counts["Count"],
+                hole=0.4,
+                marker=dict(colors=["#ff0055", "#ff9900", "#ffea00", "#00f0ff", "#7000ff"])
+            ))
+            fig_pie.update_layout(
+                height=200, margin=dict(l=10, r=10, t=10, b=10),
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation="v", y=0.5, x=0.85)
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.caption("No accounts flagged above LOW risk at current calibrator settings.")
+    
 
 # ==================================================================
 # TAB 2: CASE INVESTIGATION CENTER (DOSSIER WORKSPACE)
@@ -548,6 +592,42 @@ with tab_investigation:
                     for idx, n in enumerate(neighbors[:3]):
                         with cols[idx]:
                             st.metric(label=f"Co-Play Peer {n['neighbor_id']}", value=f"{n['attention_coefficient']}%", delta="High attention weight")
+                    
+                    # Draw a mini local NetworkX ego-graph around this player
+                    ego_g = nx.Graph()
+                    ego_g.add_node(pid, label=dossier["username"], risk=dossier["risk_level"])
+                    
+                    for n in neighbors[:3]:
+                        # Fetch peer details
+                        peer_row = scored_df[scored_df["player_id"] == n["neighbor_id"]]
+                        peer_username = peer_row.iloc[0]["username"] if not peer_row.empty else n["neighbor_id"]
+                        peer_risk = peer_row.iloc[0]["risk_level"] if not peer_row.empty else "LOW"
+                        
+                        ego_g.add_node(n["neighbor_id"], label=peer_username, risk=peer_risk)
+                        ego_g.add_edge(pid, n["neighbor_id"], weight=n["attention_coefficient"] / 100.0)
+                        
+                    fig_ego, ax_ego = plt.subplots(figsize=(6, 3))
+                    fig_ego.patch.set_facecolor('#0c0e16')
+                    ax_ego.set_facecolor('#0c0e16')
+                    
+                    colors_ego = []
+                    for node in ego_g.nodes():
+                        r = ego_g.nodes[node]["risk"]
+                        if r == "CRITICAL": colors_ego.append("#ff0055")
+                        elif r == "HIGH": colors_ego.append("#ff9900")
+                        elif r == "MEDIUM": colors_ego.append("#ffea00")
+                        else: colors_ego.append("#00ff88")
+                        
+                    labels_ego = {n: ego_g.nodes[n]["label"] for n in ego_g.nodes()}
+                    pos_ego = nx.spring_layout(ego_g, seed=42)
+                    
+                    nx.draw_networkx_nodes(ego_g, pos_ego, node_color=colors_ego, node_size=350, edgecolors="white", linewidths=1.2, ax=ax_ego)
+                    nx.draw_networkx_edges(ego_g, pos_ego, width=2, edge_color=(1.0, 1.0, 1.0, 0.2), ax=ax_ego)
+                    nx.draw_networkx_labels(ego_g, pos_ego, labels_ego, font_size=7, font_color="#f1f3f9", font_weight="bold", ax=ax_ego)
+                    
+                    plt.axis("off")
+                    st.pyplot(fig_ego)
+                    st.caption("Visualizing GAT multi-head neighbor attention weights for this node. Edge intensities show peer risk coupling.")
                 else:
                     st.caption("No significant co-play network graph attentions detected (Isolated node).")
                     
@@ -707,3 +787,71 @@ with tab_temporal:
         )
         st.plotly_chart(fig_trend, use_container_width=True)
         st.caption("Risk Velocity (🟥) detects fast-rising lobbies. Risk Acceleration (🟦) flags coordinated fraud campaign launches.")
+
+    st.write("---")
+    st.markdown("**🔬 3. Interactive Snapshot Adjacency Network Visualizer**")
+    st.write("Construct dynamic co-play or financial transaction subgraphs for the selected historical snapshot window.")
+    
+    col_vis_ctrl, col_vis_graph = st.columns([1.2, 1.8])
+    with col_vis_ctrl:
+        st.markdown("**Filter Controls**")
+        graph_type = st.radio("Select Network Layer", ["Match Co-Play Network", "Gold Trade Flows Network"])
+        min_deg = st.slider("Filter by Connection Degree", min_value=1, max_value=8, value=3)
+        max_nodes = st.slider("Max Nodes to Display", min_value=10, max_value=80, value=45)
+        
+    with col_vis_graph:
+        temporal_manager = st.session_state.compiled["temporal_manager"]
+        snap_time = datetime.fromisoformat(snap["timestamp"])
+        m_g, t_g = temporal_manager.build_decayed_graphs(snap_time)
+        
+        selected_g = m_g if graph_type == "Match Co-Play Network" else t_g
+        
+        # Filter nodes by degree
+        deg_dict = dict(selected_g.degree())
+        filtered_nodes = [node for node, deg in deg_dict.items() if deg >= min_deg]
+        
+        # Keep top max_nodes most connected nodes
+        filtered_nodes = sorted(filtered_nodes, key=lambda n: deg_dict[n], reverse=True)[:max_nodes]
+        
+        if filtered_nodes:
+            sub_g = selected_g.subgraph(filtered_nodes).copy()
+            
+            fig_snap, ax_snap = plt.subplots(figsize=(7, 4.5))
+            fig_snap.patch.set_facecolor('#0c0e16')
+            ax_snap.set_facecolor('#0c0e16')
+            
+            # Colors based on risk
+            colors_snap = []
+            for node in sub_g.nodes():
+                row = scored_df[scored_df["player_id"] == node]
+                risk = row.iloc[0]["risk_level"] if not row.empty else "LOW"
+                if risk == "CRITICAL": colors_snap.append("#ff0055")
+                elif risk == "HIGH": colors_snap.append("#ff9900")
+                elif risk == "MEDIUM": colors_snap.append("#ffea00")
+                else: colors_snap.append("#00ff88")
+                
+            labels_snap = {}
+            for n in sub_g.nodes():
+                row = scored_df[scored_df["player_id"] == n]
+                labels_snap[n] = row.iloc[0]["username"] if not row.empty else n
+                
+            pos_snap = nx.spring_layout(sub_g, seed=42)
+            
+            nx.draw_networkx_nodes(sub_g, pos_snap, node_color=colors_snap, node_size=280, edgecolors="white", linewidths=1.0, ax=ax_snap)
+            
+            # Draw edges with opacity based on weight
+            weights_snap = [sub_g[u][v].get("weight", 1.0) for u, v in sub_g.edges()]
+            if weights_snap:
+                max_w_snap = max(weights_snap) if max(weights_snap) > 0 else 1.0
+                normalized_weights_snap = [max(0.5, (w / max_w_snap) * 2.5) for w in weights_snap]
+            else:
+                normalized_weights_snap = 1
+                
+            nx.draw_networkx_edges(sub_g, pos_snap, width=normalized_weights_snap, edge_color=(1.0, 1.0, 1.0, 0.12), ax=ax_snap)
+            nx.draw_networkx_labels(sub_g, pos_snap, labels_snap, font_size=7, font_color="#f1f3f9", font_weight="bold", ax=ax_snap)
+            
+            plt.axis("off")
+            st.pyplot(fig_snap)
+            st.caption(f"Displaying **{len(filtered_nodes)}** active player profiles at **{snap['start_time'][:16]}**. Node colors represent calibrated threat scores in st.session_state.")
+        else:
+            st.info("No nodes in this snapshot meet the connection degree filter. Try lowering the degree threshold.")
