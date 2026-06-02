@@ -4,13 +4,18 @@ import networkx as nx
 from typing import Dict, List, Tuple, Any
 from app.core.logging import logger
 
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    HAS_TORCH = True
-except ImportError:
+import os
+
+if "RENDER" in os.environ or "PORT" in os.environ:
     HAS_TORCH = False
+else:
+    try:
+        import torch
+        import torch.nn as nn
+        import torch.nn.functional as F
+        HAS_TORCH = True
+    except ImportError:
+        HAS_TORCH = False
 
 if HAS_TORCH:
     class GATLayer(nn.Module):
