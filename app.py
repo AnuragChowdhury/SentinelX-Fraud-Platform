@@ -593,41 +593,45 @@ with tab_investigation:
                         with cols[idx]:
                             st.metric(label=f"Co-Play Peer {n['neighbor_id']}", value=f"{n['attention_coefficient']}%", delta="High attention weight")
                     
-                    # Draw a mini local NetworkX ego-graph around this player
-                    ego_g = nx.Graph()
-                    ego_g.add_node(pid, label=dossier["username"], risk=dossier["risk_level"])
+                    # Draw a mini local NetworkX ego-graph around this player using Pyvis for physics-enabled drag-and-drop
+                    from pyvis.network import Network
+                    net = Network(height='280px', width='100%', bgcolor='#0c0e16', font_color='white', notebook=False)
+                    net.barnes_hut()
+                    
+                    # Add central node
+                    r_c = dossier["risk_level"]
+                    if r_c == "CRITICAL": color_c = "#ff0055"
+                    elif r_c == "HIGH": color_c = "#ff9900"
+                    elif r_c == "MEDIUM": color_c = "#ffea00"
+                    else: color_c = "#00ff88"
+                    
+                    tooltip_c = f"Central Player: {dossier['username']}<br>ID: {pid}<br>Risk Class: {r_c}<br>Unified Score: {dossier['risk_score']:.1f}%"
+                    net.add_node(pid, label=dossier["username"], color=color_c, title=tooltip_c, size=28, shape="dot")
                     
                     for n in neighbors[:3]:
-                        # Fetch peer details
                         peer_row = scored_df[scored_df["player_id"] == n["neighbor_id"]]
                         peer_username = peer_row.iloc[0]["username"] if not peer_row.empty else n["neighbor_id"]
                         peer_risk = peer_row.iloc[0]["risk_level"] if not peer_row.empty else "LOW"
+                        peer_score = peer_row.iloc[0]["risk_score"] if not peer_row.empty else 0.05
                         
-                        ego_g.add_node(n["neighbor_id"], label=peer_username, risk=peer_risk)
-                        ego_g.add_edge(pid, n["neighbor_id"], weight=n["attention_coefficient"] / 100.0)
+                        if peer_risk == "CRITICAL": color_p = "#ff0055"
+                        elif peer_risk == "HIGH": color_p = "#ff9900"
+                        elif peer_risk == "MEDIUM": color_p = "#ffea00"
+                        else: color_p = "#00ff88"
                         
-                    fig_ego, ax_ego = plt.subplots(figsize=(6, 3))
-                    fig_ego.patch.set_facecolor('#0c0e16')
-                    ax_ego.set_facecolor('#0c0e16')
-                    
-                    colors_ego = []
-                    for node in ego_g.nodes():
-                        r = ego_g.nodes[node]["risk"]
-                        if r == "CRITICAL": colors_ego.append("#ff0055")
-                        elif r == "HIGH": colors_ego.append("#ff9900")
-                        elif r == "MEDIUM": colors_ego.append("#ffea00")
-                        else: colors_ego.append("#00ff88")
+                        tooltip_p = f"Peer Player: {peer_username}<br>ID: {n['neighbor_id']}<br>Risk Class: {peer_risk}<br>Unified Score: {peer_score*100:.1f}%"
+                        net.add_node(n["neighbor_id"], label=peer_username, color=color_p, title=tooltip_p, size=20, shape="dot")
+                        net.add_edge(pid, n["neighbor_id"], value=float(n["attention_coefficient"]), color="rgba(255,255,255,0.25)")
                         
-                    labels_ego = {n: ego_g.nodes[n]["label"] for n in ego_g.nodes()}
-                    pos_ego = nx.spring_layout(ego_g, seed=42)
+                    net.write_html("pyvis_ego.html")
+                    with open("pyvis_ego.html", "r", encoding="utf-8") as f:
+                        html_code = f.read()
+                    st.components.v1.html(html_code, height=300)
                     
-                    nx.draw_networkx_nodes(ego_g, pos_ego, node_color=colors_ego, node_size=350, edgecolors="white", linewidths=1.2, ax=ax_ego)
-                    nx.draw_networkx_edges(ego_g, pos_ego, width=2, edge_color=(1.0, 1.0, 1.0, 0.2), ax=ax_ego)
-                    nx.draw_networkx_labels(ego_g, pos_ego, labels_ego, font_size=7, font_color="#f1f3f9", font_weight="bold", ax=ax_ego)
-                    
-                    plt.axis("off")
-                    st.pyplot(fig_ego)
-                    st.caption("Visualizing GAT multi-head neighbor attention weights for this node. Edge intensities show peer risk coupling.")
+                    import os
+                    if os.path.exists("pyvis_ego.html"):
+                        os.remove("pyvis_ego.html")
+                    st.caption("Visualizing GAT multi-head neighbor attention weights for this node. Pull/drag nodes or zoom to explore connections interactively.")
                 else:
                     st.caption("No significant co-play network graph attentions detected (Isolated node).")
                     
@@ -695,50 +699,43 @@ with tab_collusion:
     with col_net:
         st.markdown("**3. Ring Multigraph Adjacency Visualizer**")
         
-        # Build Matplotlib graph render
+        # Build physics-enabled interactive network graph using Pyvis
         if win_trading_rings and selected_ring_id:
             ring = next((r for r in win_trading_rings if r["ring_id"] == selected_ring_id), None)
             if ring:
-                # Build local NetworkX graph to draw
-                sub_g = nx.Graph()
-                members = ring["members"]
+                from pyvis.network import Network
+                net = Network(height='400px', width='100%', bgcolor='#0c0e16', font_color='white', notebook=False)
+                net.barnes_hut()
                 
-                # Add nodes and edges
+                members = ring["members"]
                 for m in members:
                     row = scored_df[scored_df["player_id"] == m]
                     username = row.iloc[0]["username"] if not row.empty else m
-                    risk_lvl = row.iloc[0]["risk_level"] if not row.empty else "LOW"
-                    sub_g.add_node(m, label=username, risk=risk_lvl)
+                    risk = row.iloc[0]["risk_level"] if not row.empty else "LOW"
+                    score = row.iloc[0]["risk_score"] if not row.empty else 0.05
                     
-                # Add clique connections
+                    if risk == "CRITICAL": color = "#ff0055"
+                    elif risk == "HIGH": color = "#ff9900"
+                    elif risk == "MEDIUM": color = "#ffea00"
+                    else: color = "#00ff88"
+                    
+                    tooltip = f"Player: {username}<br>ID: {m}<br>Risk Class: {risk}<br>Unified Score: {score*100:.1f}%"
+                    net.add_node(m, label=username, color=color, title=tooltip, size=24, shape="dot")
+                    
                 for m1 in members:
                     for m2 in members:
                         if m1 != m2:
-                            sub_g.add_edge(m1, m2)
+                            net.add_edge(m1, m2, color="rgba(255,255,255,0.22)")
                             
-                fig, ax = plt.subplots(figsize=(6, 4))
-                fig.patch.set_facecolor('#0c0e16')
-                ax.set_facecolor('#0c0e16')
+                net.write_html("pyvis_ring.html")
+                with open("pyvis_ring.html", "r", encoding="utf-8") as f:
+                    html_code = f.read()
+                st.components.v1.html(html_code, height=420)
                 
-                # Colors map based on risk
-                colors_map = []
-                for node in sub_g.nodes(data=True):
-                    risk = node[1].get("risk", "LOW")
-                    if risk == "CRITICAL": colors_map.append("#ff0055")
-                    elif risk == "HIGH": colors_map.append("#ff9900")
-                    elif risk == "MEDIUM": colors_map.append("#ffea00")
-                    else: colors_map.append("#00ff88")
-                    
-                labels = {n: data.get("label", n) for n, data in sub_g.nodes(data=True)}
-                pos = nx.spring_layout(sub_g, seed=42)
-                
-                nx.draw_networkx_nodes(sub_g, pos, node_color=colors_map, node_size=500, edgecolors="white", linewidths=1.5, ax=ax)
-                nx.draw_networkx_edges(sub_g, pos, width=2, edge_color=(1.0, 1.0, 1.0, 0.15), ax=ax)
-                nx.draw_networkx_labels(sub_g, pos, labels, font_size=8, font_color="#f1f3f9", font_weight="bold", ax=ax)
-                
-                plt.axis("off")
-                st.pyplot(fig)
-                st.caption("Node colors: 🟥 Critical | 🟧 High | 🟨 Medium | 🟩 Low")
+                import os
+                if os.path.exists("pyvis_ring.html"):
+                    os.remove("pyvis_ring.html")
+                st.caption("Node colors: 🟥 Critical | 🟧 High | 🟨 Medium | 🟩 Low. Pull/drag nodes or zoom to explore connections interactively.")
 
 # ==================================================================
 # TAB 4: TEMPORAL SNAPSHOT MANAGER
@@ -816,42 +813,36 @@ with tab_temporal:
         if filtered_nodes:
             sub_g = selected_g.subgraph(filtered_nodes).copy()
             
-            fig_snap, ax_snap = plt.subplots(figsize=(7, 4.5))
-            fig_snap.patch.set_facecolor('#0c0e16')
-            ax_snap.set_facecolor('#0c0e16')
+            from pyvis.network import Network
+            net = Network(height='450px', width='100%', bgcolor='#0c0e16', font_color='white', notebook=False)
+            net.barnes_hut()
             
-            # Colors based on risk
-            colors_snap = []
             for node in sub_g.nodes():
                 row = scored_df[scored_df["player_id"] == node]
+                username = row.iloc[0]["username"] if not row.empty else node
                 risk = row.iloc[0]["risk_level"] if not row.empty else "LOW"
-                if risk == "CRITICAL": colors_snap.append("#ff0055")
-                elif risk == "HIGH": colors_snap.append("#ff9900")
-                elif risk == "MEDIUM": colors_snap.append("#ffea00")
-                else: colors_snap.append("#00ff88")
+                score = row.iloc[0]["risk_score"] if not row.empty else 0.05
                 
-            labels_snap = {}
-            for n in sub_g.nodes():
-                row = scored_df[scored_df["player_id"] == n]
-                labels_snap[n] = row.iloc[0]["username"] if not row.empty else n
+                if risk == "CRITICAL": color = "#ff0055"
+                elif risk == "HIGH": color = "#ff9900"
+                elif risk == "MEDIUM": color = "#ffea00"
+                else: color = "#00ff88"
                 
-            pos_snap = nx.spring_layout(sub_g, seed=42)
-            
-            nx.draw_networkx_nodes(sub_g, pos_snap, node_color=colors_snap, node_size=280, edgecolors="white", linewidths=1.0, ax=ax_snap)
-            
-            # Draw edges with opacity based on weight
-            weights_snap = [sub_g[u][v].get("weight", 1.0) for u, v in sub_g.edges()]
-            if weights_snap:
-                max_w_snap = max(weights_snap) if max(weights_snap) > 0 else 1.0
-                normalized_weights_snap = [max(0.5, (w / max_w_snap) * 2.5) for w in weights_snap]
-            else:
-                normalized_weights_snap = 1
+                tooltip = f"Player: {username}<br>ID: {node}<br>Risk Class: {risk}<br>Unified Score: {score*100:.1f}%"
+                net.add_node(node, label=username, color=color, title=tooltip, size=20, shape="dot")
                 
-            nx.draw_networkx_edges(sub_g, pos_snap, width=normalized_weights_snap, edge_color=(1.0, 1.0, 1.0, 0.12), ax=ax_snap)
-            nx.draw_networkx_labels(sub_g, pos_snap, labels_snap, font_size=7, font_color="#f1f3f9", font_weight="bold", ax=ax_snap)
+            for u, v in sub_g.edges():
+                w = sub_g[u][v].get("weight", 1.0)
+                net.add_edge(u, v, value=float(w), color="rgba(255,255,255,0.18)")
+                
+            net.write_html("pyvis_temp.html")
+            with open("pyvis_temp.html", "r", encoding="utf-8") as f:
+                html_code = f.read()
+            st.components.v1.html(html_code, height=470)
             
-            plt.axis("off")
-            st.pyplot(fig_snap)
-            st.caption(f"Displaying **{len(filtered_nodes)}** active player profiles at **{snap['start_time'][:16]}**. Node colors represent calibrated threat scores in st.session_state.")
+            import os
+            if os.path.exists("pyvis_temp.html"):
+                os.remove("pyvis_temp.html")
+            st.caption(f"Displaying **{len(filtered_nodes)}** active player profiles at **{snap['start_time'][:16]}**. Pull/drag nodes or zoom to explore connections interactively.")
         else:
             st.info("No nodes in this snapshot meet the connection degree filter. Try lowering the degree threshold.")
