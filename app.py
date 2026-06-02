@@ -516,7 +516,7 @@ with tab_investigation:
                     <div class='timeline-item'>
                         <div class='timeline-dot'></div>
                         <strong>{item['event']}</strong> <span style='font-size:0.7rem; color:var(--text-muted)'>[{item['category']}]</span><br/>
-                        <span style='font-size:0.75rem; color:#ffea00'>{new Date(item['timestamp']).toLocaleDateString() if 'new Date' in locals() else item['timestamp'][:10]} • Risk: {item['risk_score']}%</span>
+                        <span style='font-size:0.75rem; color:#ffea00'>{item['timestamp'][:10]} {item['timestamp'][11:16]} • Risk: {item['risk_score']}%</span>
                     </div>
                     """, unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
