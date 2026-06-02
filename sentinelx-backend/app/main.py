@@ -26,6 +26,12 @@ app.include_router(router, prefix=settings.API_V1_STR)
 @app.on_event("startup")
 async def startup_event():
     logger.info("Initializing SentinelX FastAPI Server...")
+    
+    # Spawn the heavy V2 ML training pipeline asynchronously in the background
+    import asyncio
+    from app.api.routes import initialize_pipeline_bg
+    asyncio.create_task(initialize_pipeline_bg())
+    
     # Start real-time background simulator
     await streamer.start_streaming()
     logger.info("SentinelX background streams successfully spawned.")

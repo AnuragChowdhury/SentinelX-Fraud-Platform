@@ -1,6 +1,6 @@
 import asyncio
 import numpy as np
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException, Depends
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.logging import logger
@@ -17,58 +17,93 @@ from app.services.collusion import CollusionDetector
 from app.services.temporal_graphs import TemporalGraphManager
 from app.services.explainability_engine import AdvancedExplainabilityEngine
 from app.services.stream import RealTimeStreamSimulator
+from datetime import datetime
 
 router = APIRouter()
 
-# Instantiate core engines globally on start
-logger.info("Initializing SentinelX V2 Research-Grade Pipelines...")
+# Globals for asynchronous lazy initialization
+is_initialized = False
+generator = None
+graph_builder = None
+m_g, t_g, s_g, d_g = None, None, None, None
+features_df = None
+supervised_model = None
+supervised_metrics = None
+unsupervised_model = None
+graph_ml_model = None
+gat_model = None
+scorer = None
+supervised_probs = None
+unsupervised_scores = None
+gcn_probs = None
+scored_df = None
+collusion_detector = None
+win_trading_rings = []
+farming_groups = []
+temporal_manager = None
+temporal_snapshots = []
+explainability_engine = None
 
-# 1. Generator and Graph Builders
-generator = generator_instance
-graph_builder = GraphBuilder(
-    generator.players, generator.matches, generator.trades, 
-    generator.social_edges, generator.login_logs
-)
-m_g, t_g, s_g, d_g = graph_builder.build_all_graphs()
-
-# 2. Extract features
-pipeline = FeaturePipeline(generator, graph_builder)
-features_df = pipeline.extract_all_features()
-
-# 3. Train models
-supervised_model = SupervisedRiskModel()
-supervised_metrics = supervised_model.train(features_df)
-
-unsupervised_model = UnsupervisedAnomalyModel()
-unsupervised_model.train(features_df)
-
-# GCN Fallback logic handled natively inside graph_ml.py
-graph_ml_model = GraphMLModel(in_features=len(supervised_model.feature_cols))
-gnn_metrics = graph_ml_model.train_graph_gcn(features_df, m_g)
-
-# GAT Model (Graph Attention Network)
-gat_model = GraphAttentionModel(in_features=len(supervised_model.feature_cols))
-gat_metrics = gat_model.train_gat(features_df, m_g)
-
-# 4. Score Risk
-scorer = UnifiedRiskScorer()
-supervised_probs = np.array([supervised_model.predict_risk(row) for row in features_df[supervised_model.feature_cols].values])
-unsupervised_scores = np.array([unsupervised_model.predict_anomaly_score(row) for row in features_df[supervised_model.feature_cols].values])
-gcn_probs = graph_ml_model.predict_graph_risks(features_df, m_g)
-
-scored_df = scorer.score_players(features_df, supervised_probs, unsupervised_scores, gcn_probs)
-
-# 5. Collusion Engines
-collusion_detector = CollusionDetector(m_g, t_g, s_g)
-win_trading_rings = collusion_detector.detect_win_trading_rings()
-farming_groups = collusion_detector.detect_farming_groups()
-
-# 6. Temporal Graph Manager
-temporal_manager = TemporalGraphManager(generator.matches, generator.trades)
-temporal_snapshots = temporal_manager.generate_sliding_snapshots(num_snapshots=5)
-
-# 7. Explainability Aggregators
-explainability_engine = AdvancedExplainabilityEngine(supervised_model, gat_model)
+async def initialize_pipeline_bg():
+    global generator, graph_builder, m_g, t_g, s_g, d_g, features_df
+    global supervised_model, supervised_metrics, unsupervised_model, graph_ml_model, gat_model
+    global scorer, supervised_probs, unsupervised_scores, gcn_probs, scored_df
+    global collusion_detector, win_trading_rings, farming_groups, temporal_manager, temporal_snapshots, explainability_engine
+    global is_initialized
+    
+    logger.info("Initializing SentinelX V2 Research-Grade Pipelines in the background...")
+    try:
+        # 1. Generator and Graph Builders
+        generator = generator_instance
+        graph_builder = GraphBuilder(
+            generator.players, generator.matches, generator.trades, 
+            generator.social_edges, generator.login_logs
+        )
+        m_g, t_g, s_g, d_g = graph_builder.build_all_graphs()
+        
+        # 2. Extract features
+        pipeline = FeaturePipeline(generator, graph_builder)
+        features_df = pipeline.extract_all_features()
+        
+        # 3. Train models
+        supervised_model = SupervisedRiskModel()
+        supervised_metrics = supervised_model.train(features_df)
+        
+        unsupervised_model = UnsupervisedAnomalyModel()
+        unsupervised_model.train(features_df)
+        
+        # GCN Fallback logic handled natively inside graph_ml.py
+        graph_ml_model = GraphMLModel(in_features=len(supervised_model.feature_cols))
+        _ = graph_ml_model.train_graph_gcn(features_df, m_g)
+        
+        # GAT Model (Graph Attention Network)
+        gat_model = GraphAttentionModel(in_features=len(supervised_model.feature_cols))
+        _ = gat_model.train_gat(features_df, m_g)
+        
+        # 4. Score Risk
+        scorer = UnifiedRiskScorer()
+        supervised_probs = np.array([supervised_model.predict_risk(row) for row in features_df[supervised_model.feature_cols].values])
+        unsupervised_scores = np.array([unsupervised_model.predict_anomaly_score(row) for row in features_df[supervised_model.feature_cols].values])
+        gcn_probs = graph_ml_model.predict_graph_risks(features_df, m_g)
+        
+        scored_df = scorer.score_players(features_df, supervised_probs, unsupervised_scores, gcn_probs)
+        
+        # 5. Collusion Engines
+        collusion_detector = CollusionDetector(m_g, t_g, s_g)
+        win_trading_rings = collusion_detector.detect_win_trading_rings()
+        farming_groups = collusion_detector.detect_farming_groups()
+        
+        # 6. Temporal Graph Manager
+        temporal_manager = TemporalGraphManager(generator.matches, generator.trades)
+        temporal_snapshots = temporal_manager.generate_sliding_snapshots(num_snapshots=5)
+        
+        # 7. Explainability Aggregators
+        explainability_engine = AdvancedExplainabilityEngine(supervised_model, gat_model)
+        
+        is_initialized = True
+        logger.info("SentinelX V2 Pipelines successfully initialized and loaded in background!")
+    except Exception as e:
+        logger.error(f"Error during background pipeline initialization: {e}", exc_info=True)
 
 # WebSockets Coordinator
 class ConnectionManager:
@@ -97,13 +132,20 @@ manager = ConnectionManager()
 def handle_live_alert(alert: Dict[str, Any]):
     asyncio.create_task(manager.broadcast(alert))
 
-streamer = RealTimeStreamSimulator(generator.players, on_alert_callback=handle_live_alert)
+streamer = RealTimeStreamSimulator(generator_instance.players, on_alert_callback=handle_live_alert)
+
+def check_initialized():
+    if not is_initialized or scored_df is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SentinelX V2 anti-cheat models are currently training in the background. Please wait ~15 seconds and refresh."
+        )
 
 # ======================================================
 # SentinelX V2 - NEW ENDPOINTS
 # ======================================================
 
-@router.get("/business-intelligence")
+@router.get("/business-intelligence", dependencies=[Depends(check_initialized)])
 def get_bi_analytics():
     """
     Returns data for the Executive BI dashboard.
@@ -150,7 +192,7 @@ def get_bi_analytics():
         "current_thresholds": plugin_registry.thresholds
     }
 
-@router.post("/business-intelligence/thresholds")
+@router.post("/business-intelligence/thresholds", dependencies=[Depends(check_initialized)])
 def post_update_thresholds(medium: float, high: float, critical: float):
     plugin_registry.update_thresholds(medium, high, critical)
     # Dynamic scored categories change on standard scoring matrix
@@ -160,7 +202,7 @@ def post_update_thresholds(medium: float, high: float, critical: float):
     scored_df.loc[scored_df["risk_score"] < medium, "risk_level"] = "LOW"
     return {"message": "System threat thresholds dynamically tuned.", "thresholds": plugin_registry.thresholds}
 
-@router.post("/business-intelligence/weights")
+@router.post("/business-intelligence/weights", dependencies=[Depends(check_initialized)])
 def post_update_weights(graph: float, behavioral: float, device: float, transaction: float):
     plugin_registry.update_weights(graph, behavioral, device, transaction)
     # Trigger global rescoring based on updated dynamic pillar weights
@@ -173,31 +215,31 @@ def post_update_weights(graph: float, behavioral: float, device: float, transact
     scored_df = scorer.score_players(features_df, supervised_probs, unsupervised_scores, gcn_probs)
     return {"message": "Pillar scorer weights dynamically recalculated.", "weights": plugin_registry.weights}
 
-@router.post("/business-intelligence/drift/activate")
+@router.post("/business-intelligence/drift/activate", dependencies=[Depends(check_initialized)])
 def post_activate_drift():
     plugin_registry.activate_concept_drift()
     return {"message": "Concept Drift injection successful.", "metrics": plugin_registry.get_drift_metrics()}
 
-@router.post("/business-intelligence/drift/retrain")
+@router.post("/business-intelligence/drift/retrain", dependencies=[Depends(check_initialized)])
 def post_retrain_drift():
     plugin_registry.trigger_online_retraining()
     return {"message": "Online Retraining successfully completed.", "metrics": plugin_registry.get_drift_metrics()}
 
-@router.get("/temporal-analysis")
+@router.get("/temporal-analysis", dependencies=[Depends(check_initialized)])
 def get_temporal_analysis():
     return {
         "snapshots": temporal_snapshots,
         "decay_rate_lambda": temporal_manager.decay_rate
     }
 
-@router.get("/players/{player_id}/investigate")
+@router.get("/players/{player_id}/investigate", dependencies=[Depends(check_initialized)])
 def get_investigation_dossier(player_id: str):
     dossier = explainability_engine.compile_investigation_dossier(player_id, scored_df)
     if "error" in dossier:
         raise HTTPException(status_code=404, detail=dossier["error"])
     return dossier
 
-@router.post("/players/{player_id}/intervene")
+@router.post("/players/{player_id}/intervene", dependencies=[Depends(check_initialized)])
 def post_intervention(player_id: str, action: str):
     allowed_actions = ["quarantine", "shadow_ban", "whitelist", "freeze_economy", "escalate"]
     if action.lower() not in allowed_actions:
@@ -218,7 +260,7 @@ def post_intervention(player_id: str, action: str):
 # V1 Endpoints retained for UI retrocompatibility
 # ======================================================
 
-@router.get("/overview")
+@router.get("/overview", dependencies=[Depends(check_initialized)])
 def get_overview():
     total_players = len(scored_df)
     flagged_players = len(scored_df[scored_df["risk_level"] != "LOW"])
@@ -245,7 +287,7 @@ def get_overview():
         "model_performance": supervised_metrics
     }
 
-@router.get("/players")
+@router.get("/players", dependencies=[Depends(check_initialized)])
 def get_players(
     page: int = 1,
     limit: int = 25,
@@ -287,7 +329,7 @@ def get_players(
         "players": players_list
     }
 
-@router.get("/players/{player_id}")
+@router.get("/players/{player_id}", dependencies=[Depends(check_initialized)])
 def get_player_detail(player_id: str):
     player_row = scored_df[scored_df["player_id"] == player_id]
     if player_row.empty:
@@ -302,7 +344,7 @@ def get_player_detail(player_id: str):
     p_dict["winrate_recent"] = float(round(p_dict["winrate_recent"] * 100, 1))
     return p_dict
 
-@router.get("/players/{player_id}/explain")
+@router.get("/players/{player_id}/explain", dependencies=[Depends(check_initialized)])
 def get_player_explain(player_id: str):
     dossier = explainability_engine.compile_investigation_dossier(player_id, scored_df)
     if "error" in dossier:
@@ -324,14 +366,14 @@ def get_player_explain(player_id: str):
         ]
     }
 
-@router.get("/collusion")
+@router.get("/collusion", dependencies=[Depends(check_initialized)])
 def get_collusion_rings():
     return {
         "win_trading_rings": win_trading_rings,
         "farming_groups": farming_groups
     }
 
-@router.get("/graph/subgraph")
+@router.get("/graph/subgraph", dependencies=[Depends(check_initialized)])
 def get_subgraph(ring_id: Optional[str] = None):
     nodes_to_extract = []
     
