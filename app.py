@@ -165,11 +165,29 @@ def load_and_compile_pipelines():
     # 5. Collusion Engines
     collusion_detector = CollusionDetector(m_g, t_g, s_g)
     win_trading_rings = collusion_detector.detect_win_trading_rings()
+    for r in win_trading_rings:
+        if "winrate_recent" in features_df.columns:
+            r["average_winrate"] = float(features_df[features_df["player_id"].isin(r["members"])]["winrate_recent"].mean())
+        else:
+            r["average_winrate"] = 0.50
+            
     farming_groups = collusion_detector.detect_farming_groups()
+    for g in farming_groups:
+        g["mule_id"] = g.get("hub_player_id")
+        g["farmers"] = g.get("farmer_ids", [])
+        g["gold_volume"] = g.get("receiver_gold", 0.0)
+    
     
     # 6. Temporal Graph Manager
     temporal_manager = TemporalGraphManager(gen.matches, gen.trades)
     temporal_snapshots = temporal_manager.generate_sliding_snapshots(num_snapshots=5)
+    for snap in temporal_snapshots:
+        snap_time = datetime.fromisoformat(snap["timestamp"])
+        snap["start_time"] = (snap_time - timedelta(days=2)).isoformat()
+        snap["end_time"] = snap_time.isoformat()
+        snap["matches_count"] = snap["edge_count"]
+        snap["trades_count"] = int(snap["trade_gold_volume"])
+    
     
     # 7. Explainability Aggregators
     explainability_engine = AdvancedExplainabilityEngine(supervised_model, gat_model)
@@ -635,7 +653,7 @@ with tab_collusion:
                 pos = nx.spring_layout(sub_g, seed=42)
                 
                 nx.draw_networkx_nodes(sub_g, pos, node_color=colors_map, node_size=500, edgecolors="white", linewidths=1.5, ax=ax)
-                nx.draw_networkx_edges(sub_g, pos, width=2, edge_color="rgba(255,255,255,0.15)", ax=ax)
+                nx.draw_networkx_edges(sub_g, pos, width=2, edge_color=(1.0, 1.0, 1.0, 0.15), ax=ax)
                 nx.draw_networkx_labels(sub_g, pos, labels, font_size=8, font_color="#f1f3f9", font_weight="bold", ax=ax)
                 
                 plt.axis("off")
