@@ -162,7 +162,7 @@ SentinelX translates mathematical fraud indicators into business value:
 
 1.  **Revenue Loss Mitigation (ROI)**:
     In-game gold inflation degrades the virtual economy and drops real-money purchases. SentinelX calculates real-time savings using:
-    $$\text{ROI} = \left(\text{Cumulative Gold Vol} \times 1.25\right) + \left(\text{Quarantined Bot Accounts} \times \$150\right)$$
+    $$\text{ROI} = \left(\text{Cumulative Gold Vol} \times 1.25\right) + \left(\text{Quarantined Bot Accounts} \times 150 \text{ USD}\right)$$
 2.  **Matchmaking & MMR Integrity**:
     By detecting win-trading cliques and smurfs, SentinelX preserves fairness in competitive lobbies. This directly reduces player churn and increases **Customer Lifetime Value (LTV)**.
 3.  **Security Operations Efficiency**:
