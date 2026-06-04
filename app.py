@@ -7,6 +7,15 @@ import networkx as nx
 from datetime import datetime, timedelta
 import time
 import os
+import shutil
+
+# Monkeypatch shutil.copytree to prevent FileExistsError when pyvis writes HTML in Streamlit Cloud.
+# pyvis calls shutil.copytree(src, dst) without dirs_exist_ok=True, which fails if the directory exists.
+original_copytree = shutil.copytree
+def patched_copytree(src, dst, *args, **kwargs):
+    kwargs["dirs_exist_ok"] = True
+    return original_copytree(src, dst, *args, **kwargs)
+shutil.copytree = patched_copytree
 
 # Import SentinelX V2 core library modules
 from sentinelx.services.generator import generator_instance
