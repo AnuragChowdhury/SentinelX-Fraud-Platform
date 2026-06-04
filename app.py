@@ -790,6 +790,14 @@ with tab_collusion:
                 net.write_html("pyvis_ring.html")
                 with open("pyvis_ring.html", "r", encoding="utf-8") as f:
                     html_code = f.read()
+                # Default to zoomed out view once stabilized
+                html_code = html_code.replace(
+                    "network = new vis.Network(container, data, options);",
+                    "network = new vis.Network(container, data, options);\n"
+                    "                  network.once('stabilizationIterationsDone', function() {\n"
+                    "                      network.moveTo({ scale: network.getScale() * 0.6 });\n"
+                    "                  });"
+                )
                 st.components.v1.html(html_code, height=420)
                 
                 import os
@@ -914,6 +922,14 @@ with tab_temporal:
             net.write_html("pyvis_temp.html")
             with open("pyvis_temp.html", "r", encoding="utf-8") as f:
                 html_code = f.read()
+            # Default to zoomed out view once stabilized
+            html_code = html_code.replace(
+                "network = new vis.Network(container, data, options);",
+                "network = new vis.Network(container, data, options);\n"
+                "                  network.once('stabilizationIterationsDone', function() {\n"
+                "                      network.moveTo({ scale: network.getScale() * 0.6 });\n"
+                "                  });"
+            )
             st.components.v1.html(html_code, height=470)
             
             import os
